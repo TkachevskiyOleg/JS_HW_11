@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+
+<body>
+    <form id="searchForm">
+        <label for="movieTitle">Title:</label>
+        <input type="text" id="movieTitle" name="movieTitle" required>
+        <label for="type">Type:</label>
+        <select id="type" name="type">
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+            <option value="episode">Episode</option>
+        </select>
+        <button type="submit">Enter</button>
+    </form>
+    <div class="movie-list" id="movieList"></div>
+    <div class="loader-div">
+        <div class="loader" style="display: none;"></div>
+    </div>
+
+    <div class="btn-div">
+        <button class="more-button" data-page="2" style="display: none;">More</button>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="poster-container">
+                <img class="poster" src="" alt="Movie Poster">
+            </div>
+            <div class="movie-details">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class MovieService {
+            constructor(apiKey) {
+                this.apiKey = apiKey;
+            }
+
+            async search(title, type, page) {
+                const response = await $.ajax({
+                    url: 'https://www.omdbapi.com/',
+                    type: 'GET',
+                    dataType: 'json',
+                    data: {
+                        apikey: this.apiKey,
+                        s: title,
+                        type: type,
+                        page: page
+                    }
+                });
+                return response;
+            }
+
+            async getMovie(movieId) {
+                const response = await $.ajax({
+                    url: 'https://www.omdbapi.com/',
+                    type: 'GET',
+                    dataType: 'json',
+                    data: {
+                        apikey: this.apiKey,
+                        i: movieId
+                    }
+                });
+                return response;
+            }
+        }
+
+        const movieService = new MovieService('8d865485');
+        const moviesPerPage = 10;
+
+        function displayMovies(movies) {
+            $('#movieList').empty();
+            movies.forEach(function (movie) {
+                const html = '<div class="movie">' +
+                    '<h2>' + movie.Title + '</h2>' +
+                    '<img src="' + movie.Poster + '" alt="' + movie.Title + ' Poster">' +
+                    '<p>Type: ' + movie.Type + '</p>' +
+                    '<p>Year: ' + movie.Year + '</p>' +
+                    '<button class="movie-details" data-imdbid="' + movie.imdbID + '">Details</button>' +
+                    '</div>';
+                $('#movieList').append(html);
+            });
+            $('.more-button').show();
+        }
+
+        function appendMovies(movies) {
+            movies.forEach(function (movie) {
+                const html = '<div class="movie">' +
+                    '<h2>' + movie.Title + '</h2>' +
+                    '<img src="' + movie.Poster + '" alt="' + movie.Title + ' Poster">' +
+                    '<p>Type: ' + movie.Type + '</p>' +
+                    '<p>Year: ' + movie.Year + '</p>' +
+                    '<button class="movie-details" data-imdbid="' + movie.imdbID + '">Details</button>' +
+                    '</div>';
+                $('#movieList').append(html);
+            });
+        }
+
+        function hideModal() {
+            $('#modal').hide();
+        }
+
+        $(document).ready(function () {
+            let currentPage = 1;
+
+            $('#searchForm').submit(async function (e) {
+                e.preventDefault();
+                const movieTitle = $('#movieTitle').val();
+                const type = $('#type').val();
+                const response = await movieService.search(movieTitle, type, 1);
+                if (response.Response === "True") {
+                    const totalMovies = parseInt(response.totalResults);
+                    displayMovies(response.Search);
+                    displayPagination(totalMovies, 1, moviesPerPage);
+                } else {
+                    $('#movieList').html('<p>Movie not found!</p>');
+                }
+            });
+
+            $('.close').click(function () {
+                $('.modal').hide();
+            });
+
+            $(document).on('click', '.movie-details', async function () {
+                const imdbID = $(this).data('imdbid');
+                const response = await movieService.getMovie(imdbID);
+                if (response.Response === "True") {
+                    const movie = response;
+                    const modalContent = `
+                    <h2>${movie.Title}</h2>
+                    <img src="${movie.Poster}" alt="${movie.Title} Poster">
+                    <p>Type: ${movie.Type}</p>
+                    <p>Year: ${movie.Year}</p>
+                    <p>Rated: ${movie.Rated}</p>
+                    <p>Released: ${movie.Released}</p>
+                    <p>Runtime: ${movie.Runtime}</p>
+                    <p>Genre: ${movie.Genre}</p>
+                    <p>Director: ${movie.Director}</p>
+                    <p>Actors: ${movie.Actors}</p>
+                    <p>Plot: ${movie.Plot}</p>
+                    <p>Language: ${movie.Language}</p>
+                    <p>Country: ${movie.Country}</p>
+                    <p>Awards: ${movie.Awards}</p>
+                `;
+                    $('.modal-content').html(modalContent);
+                    $('.modal').show();
+                } else {
+                    alert('Movie details not found!');
+                }
+            });
+
+            $(document).on('click', '.page-link', async function () {
+                const movieTitle = $('#movieTitle').val();
+                const type = $('#type').val();
+                const currentPage = $(this).data('page');
+                const response = await movieService.search(movieTitle, type, currentPage);
+                if (response.Response === "True") {
+                    const totalMovies = parseInt(response.totalResults);
+                    displayMovies(response.Search);
+                } else {
+                    $('#movieList').html('<p>Movie not found!</p>');
+                }
+            });
+
+            $('.more-button').click(async function () {
+                $(this).prop('disabled', true);
+                $('.loader').show();
+                currentPage++;
+                const movieTitle = $('#movieTitle').val();
+                const type = $('#type').val();
+
+                try {
+                    const response = await movieService.search(movieTitle, type, currentPage);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    if (response.Response === "True") {
+                        const totalMovies = parseInt(response.totalResults);
+                        appendMovies(response.Search);
+                    } else {
+                        $('#movieList').html('<p>Movie not found!</p>');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                } finally {
+                    $('.loader').hide();
+                    $(this).prop('disabled', false);
+                }
+            });
+        });
+
+        $('#modal').click(function (e) {
+            if (e.target === this) {
+                hideModal();
+            }
+        });
+
+
+        $(document).on('click', '.movie-details', async function () {
+            const imdbID = $(this).data('imdbid');
+            const response = await movieService.getMovie(imdbID);
+        });
+
+    </script>
+</body>
+</html>
